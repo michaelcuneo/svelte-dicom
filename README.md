@@ -4,6 +4,8 @@ Svelte-Dicom evening project, based on Reddit comment. [text](https://www.reddit
 
 I like a challenge, to keep myself entertained of an evening after the 9-5... this medical tool pairs well with my research projects at The University of Newcastle... so here goes nothing,... or something. DICOM imaging tool for SvelteKit on the way.
 
+![image](https://halide.michaelcuneo.com.au/misc/Screenshot%202025-07-17%20180143.png)
+
 ## Installation
 
 ```bash
@@ -14,8 +16,6 @@ npm i @michaelcuneo/svelte-dicom
 ## Usage
 
 ```javascript
-# not sure yet... still developing the canvas renderer.
-# Easiest way...
 <script lang="ts">
 	let file = $state<File | null>(null);
 	let files = $state<FileList | null>(null);
