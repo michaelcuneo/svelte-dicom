@@ -16,3 +16,10 @@ npm i @michaelcuneo/svelte-dicom
 ```bash
 # not sure yet... still developing the canvas renderer.
 ```
+
+## Todo
+
+- Decode/Encode for Uncompressed, Lossless, Lossy and RLE.
+- Sync/Async Dictionary Loading.
+- Fix image controls.
+- Apply networking implementations for PACS

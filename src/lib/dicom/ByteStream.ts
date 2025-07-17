@@ -1,28 +1,10 @@
-// CORE
-export interface DataElement {
-	tag: string; // e.g., '0010,0010'
-	vr: string; // Value Representation, e.g., 'PN' for Person Name
-	length: number; // Length of the value in bytes
-	value: string | number | Uint8Array | null; // The actual value, type depends on vr
-}
-
-export interface DataSet {
-	elements: DataElement[]; // Array of DataElements
-}
-
-export interface TransferSyntax {
-	uid: string; // Unique identifier for the transfer syntax
-	isLittleEndian: boolean;
-	isExplicitVR: boolean;
-	isEncapsulated: boolean;
-}
-
-// BYTE STREAM
 export class ByteStream {
-	private view: DataView;
+	private buffer: ArrayBuffer;
+	public view: DataView;
 	private offset: number = 0;
 
-	constructor(private buffer: ArrayBuffer) {
+	constructor(buffer: ArrayBuffer) {
+		this.buffer = buffer;
 		this.view = new DataView(buffer);
 	}
 
@@ -66,5 +48,12 @@ export class ByteStream {
 
 	getLength() {
 		return this.view.byteLength;
+	}
+
+	seek(position: number): void {
+		if (position < 0 || position > this.buffer.byteLength) {
+			throw new RangeError('Seek position out of bounds');
+		}
+		this.offset = position;
 	}
 }

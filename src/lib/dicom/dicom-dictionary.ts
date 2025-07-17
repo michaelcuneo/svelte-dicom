@@ -1,12 +1,12 @@
-export interface DICOMDictionaryEntry {
-	tag: string; // DICOM tag in the format (gggg,eeee)
+export interface DICOMEntry {
+	tag: string; // DICOM tag in hexadecimal format
 	vr: string; // Value Representation, e.g., 'PN' for Person Name
 	name: string; // Name of the DICOM element
-	vm: string; // Value Multiplicity, e.g., '1', '1-n'
-	version: string; // DICOM version or standard
+	vm: string; // Value Multiplicity, e.g., '1' for single value, '1-n' for multiple values
+	version: string; // Version of the DICOM standard this entry belongs to
 }
 
-export const DICOMDictionary: Record<string, DICOMDictionaryEntry> = {
+export const dictionary: Record<string, DICOMEntry>[] = {
 	'(0000,0000)': {
 		tag: '(0000,0000)',
 		vr: 'UL',
@@ -56030,4 +56030,4 @@ export const DICOMDictionary: Record<string, DICOMDictionaryEntry> = {
 	}
 };
 
-export default DICOMDictionary;
+export default dictionary;
