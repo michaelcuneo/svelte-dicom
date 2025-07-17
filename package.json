@@ -1,5 +1,5 @@
 {
-	"name": "dicom",
+	"name": "svelte-dicom",
 	"version": "0.0.1",
 	"scripts": {
 		"dev": "vite dev",
@@ -53,6 +53,15 @@
 		"vite": "^7.0.4"
 	},
 	"keywords": [
-		"svelte"
+		"svelte",
+		"dicom",
+		"medical",
+		"healthcare",
+		"radiology",
+		"imaging",
+		"viewer",
+		"medical imaging",
+		"dicom viewer",
+		"dicom web"
 	]
 }
