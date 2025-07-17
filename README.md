@@ -7,14 +7,36 @@ I like a challenge, to keep myself entertained of an evening after the 9-5... th
 ## Installation
 
 ```bash
-# install the repo.
+# install the repo. (NOT ACTUALLY LIVE YET, I WILL PUBLISH ONCE STABLE)
 npm i @michaelcuneo/svelte-dicom
 ```
 
 ## Usage
 
-```bash
+```javascript
 # not sure yet... still developing the canvas renderer.
+# Easiest way...
+<script lang="ts">
+	let file = $state<File | null>(null);
+	let files = $state<FileList | null>(null);
+	import Dicom from '@michaelcuneo/svelte-dicom';
+</script>
+
+<input
+	type="file"
+	accept=".dcm"
+	onchange={(e) => {
+		// Add file to the files list
+		const target = e.target as HTMLInputElement;
+		files = target.files;
+		if (files) {
+			file = files[0]; // Get the first file
+		} else {
+			file = null; // Reset if no files selected
+		}
+	}}
+/>
+<Dicom {files} />
 ```
 
 ## Todo
@@ -23,3 +45,9 @@ npm i @michaelcuneo/svelte-dicom
 - Sync/Async Dictionary Loading.
 - Fix image controls.
 - Apply networking implementations for PACS
+- Allow windowed array's from DICOM projects.
+- Multiple DICOM's in one zip? I don't know how the PACS system does it, will research and implement window/array stuff later.
+
+## Problems
+
+- The parser is broken with my test file, and I am forced to give a fixed offset of 1400 to render the first test image.
