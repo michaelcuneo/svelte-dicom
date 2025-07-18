@@ -5,17 +5,20 @@ const dictionary: DICOMEntry[] = Object.values(rawDictionary);
 const tagMap: Record<string, DICOMEntry> = {};
 
 for (const entry of dictionary as DICOMEntry[]) {
-	tagMap[entry.tag.toUpperCase()] = entry;
+	tagMap[entry.tag.replace(/[()]/g, '').toUpperCase()] = entry;
 }
 
 export const lookupVR = (tag: string): string => {
-	return tagMap[tag.toUpperCase()]?.vr || 'UN'; // Return 'UN' if not found
+	const cleanTag = tag.replace(/[()]/g, '').toUpperCase();
+	return tagMap[cleanTag]?.vr || 'UN';
 };
 
 export const getElementKeyword = (tag: string): string => {
-	return tagMap[tag.toUpperCase()]?.name || `Unknown (${tag})`; // Return a default message if not found
+	const cleanTag = tag.replace(/[()]/g, '').toUpperCase();
+	return tagMap[cleanTag]?.name || `Unknown (${tag})`;
 };
 
 export const isPixelData = (tag: string): boolean => {
-	return tag.toUpperCase() === '(7FE0,0010)' ? true : false;
+	const cleanTag = tag.replace(/[()]/g, '').toUpperCase();
+	return cleanTag === '(7FE0,0010)' ? true : false;
 };
