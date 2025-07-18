@@ -1,18 +1,21 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { DICOMParser } from '$lib/dicom/DICOMParser.js';
-	import { TRANSFER_SYNTAXES, type TransferSyntax } from '$lib/dicom/TransferSyntax.js';
-	import { getElementKeyword } from '$lib/dicom/DICOMDictionary.js';
+	import { loadPixelData, type PixelInfo } from '$lib/dicom/loadPixelData.js';
+	import Console from './Console.svelte';
+	import Metadata from './Metadata.svelte';
+	import Controls from './Controls.svelte';
 
-	let { files }: { files: FileList | null } = $props();
+	import { logs, visible, debugLog } from '$lib/dicom/debugStore.js';
+
+	let file: File | null = $state<File | null>(null);
+	let files: FileList | null = $state<FileList | null>(null);
+	let showMetadata: boolean = $state(false);
 
 	let wrapper: HTMLDivElement | undefined = $state(undefined);
 	let canvas: HTMLCanvasElement | undefined = $state(undefined);
 	let ctx: CanvasRenderingContext2D | null = $state(null);
 
-	let debug: boolean = $state(true);
-
-	let pixelBuffer: ImageData | null = $state(null);
 	let width: number = $state(256);
 	let height: number = $state(256);
 
@@ -25,102 +28,66 @@
 	let lastX: number = $state(0);
 	let lasyY: number = $state(0);
 
+	let lastDrawWidth: number = $state(0);
+	let lastDrawHeight: number = $state(0);
+
 	let imageBitmap: ImageBitmap | null = $state(null);
-	let elements: Record<string, any> = $state([]);
+	let elements: Array<{ tag: string; value: any }> = $state([]);
+	let pixelInfo: PixelInfo | null = $state(null);
+	let currentFrame: number = $state(0);
 
 	$effect(() => {
 		if (files && files.length > 0) {
 			loadDicomFile(files[0]);
 		}
+
+		requestAnimationFrame(() => {
+			fitToScreen();
+		});
 	});
 
 	const loadDicomFile = async (file: File) => {
+		debugLog(`Loading DICOM file: ${file.name}`, { level: 'info' });
 		const buffer = await file.arrayBuffer();
-		const tmpParser = new DICOMParser(buffer);
-		const meta = tmpParser.parseMeta();
-		const transferSyntax: TransferSyntax = tmpParser.getTransferSyntaxFromMeta(meta);
+
+		debugLog(`File size: ${buffer.byteLength} bytes`, { level: 'info' });
+		// Step 1: Parse file meta header (group 0002)
+		const metaParser = new DICOMParser(buffer);
+		const meta = metaParser.parseMeta();
+		const transferSyntax = metaParser.getTransferSyntaxFromMeta(meta);
+		const datasetOffset = metaParser.getOffset();
+
+		debugLog(`Transfer Syntax UID: ${transferSyntax.uid}`, { level: 'info' });
+		if (!datasetOffset) {
+			debugLog('No dataset offset found, using default 128', 'warn');
+		}
+
+		// Step 2: Parse the dataset from proper offset
 		const parser = new DICOMParser(buffer, transferSyntax);
+		parser.byteStream.seek(datasetOffset);
+		debugLog(`Parsing DICOM dataset at offset: ${datasetOffset}`, 'info');
 		elements = parser.parse();
 
-		const rowsEl = elements.find((el) => el.tag === '0028,0010');
-		const colsEl = elements.find((el) => el.tag === '0028,0011');
-		const rows = Number(rowsEl?.value) || 1024;
-		const cols = Number(colsEl?.value) || 1024;
+		// Step 3: Load pixel data (handles uncompressed, JPEG, color, etc.)
+		debugLog(`Loading pixel data for ${elements.length} elements`, 'info');
+		pixelInfo = await loadPixelData(buffer, elements, transferSyntax.uid);
+		currentFrame = 0;
 
-		const bitsAllocated = Number(elements.find((el) => el.tag === '0028,0100')?.value) || 8;
-		const samplesPerPixel = Number(elements.find((el) => el.tag === '0028,0002')?.value) || 1;
-		const photoInterp =
-			elements.find((el) => el.tag === '0028,0004')?.value?.toString() || 'MONOCHROME2';
-		const windowCenter = Number(elements.find((el) => el.tag === '0028,1050')?.value) || 128;
-		const windowWidth = Number(elements.find((el) => el.tag === '0028,1051')?.value) || 256;
-		const inverted = photoInterp === 'MONOCHROME1';
+		if (pixelInfo) {
+			debugLog(`Pixel data loaded: ${pixelInfo.bitmaps.length} bitmaps`, 'info');
+		} else {
+			debugLog('No pixel data found', 'error');
+		}
 
-		console.log({ rowsEl, colsEl });
-
-		const applyWindow = (val: number) => {
-			const min = windowCenter - windowWidth / 2;
-			const max = windowCenter + windowWidth / 2;
-			const scaled = ((val - min) / (max - min)) * 255;
-			return Math.min(255, Math.max(0, scaled));
-		};
-
-		const bytes = new Uint8Array(buffer);
-		for (let i = 0; i < bytes.length - 4; i++) {
-			if (
-				bytes[i] === 0xe0 &&
-				bytes[i + 1] === 0x7f &&
-				bytes[i + 2] === 0x10 &&
-				bytes[i + 3] === 0x00
-			) {
-				const pixelStart = i + 8;
-				const imageData = new ImageData(cols, rows);
-
-				if (bitsAllocated === 16) {
-					const raw = new Uint16Array(buffer, pixelStart, rows * cols);
-					const imageData = new ImageData(cols, rows);
-					for (let j = 0; j < raw.length; j++) {
-						const mapped = applyWindow(raw[j]);
-						const val = inverted ? 255 - mapped : mapped;
-						imageData.data[j * 4 + 0] = val;
-						imageData.data[j * 4 + 1] = val;
-						imageData.data[j * 4 + 2] = val;
-						imageData.data[j * 4 + 3] = 255;
-					}
-					pixelBuffer = imageData;
-					imageBitmap = await createImageBitmap(imageData);
-				} else if (samplesPerPixel === 1) {
-					const raw = new Uint8Array(buffer, pixelStart, rows * cols);
-					const imageData = new ImageData(cols, rows);
-					for (let j = 0; j < raw.length; j++) {
-						const mapped = applyWindow(raw[j]);
-						const val = inverted ? 255 - mapped : mapped;
-						imageData.data[j * 4 + 0] = val;
-						imageData.data[j * 4 + 1] = val;
-						imageData.data[j * 4 + 2] = val;
-						imageData.data[j * 4 + 3] = 255;
-					}
-					pixelBuffer = imageData;
-					imageBitmap = await createImageBitmap(imageData);
-				} else if (samplesPerPixel === 3) {
-					const raw = new Uint8Array(buffer, pixelStart, rows * cols * 3);
-					const imageData = new ImageData(cols, rows);
-					for (let i = 0; i < cols * rows; i++) {
-						const base = i * 3;
-						imageData.data[i * 4 + 0] = raw[base + 0]; // R
-						imageData.data[i * 4 + 1] = raw[base + 1]; // G
-						imageData.data[i * 4 + 2] = raw[base + 2]; // B
-						imageData.data[i * 4 + 3] = 255;
-					}
-					pixelBuffer = imageData;
-					imageBitmap = await createImageBitmap(imageData);
-				}
-
-				width = cols;
-				height = rows;
-				fitToScreen();
-				draw();
-				break;
-			}
+		// Step 4: Assign imageBitmap and trigger draw
+		if (pixelInfo?.bitmaps?.[0]) {
+			imageBitmap = pixelInfo.bitmaps[0];
+			width = pixelInfo.width;
+			height = pixelInfo.height;
+			fitToScreen();
+			draw();
+		} else {
+			console.warn('No pixel data could be extracted.');
 		}
 	};
 
@@ -146,21 +113,36 @@
 		const resize = new ResizeObserver(() => draw());
 		resize.observe(wrapper);
 
-		draw();
+		return () => resize.disconnect();
 	});
 
 	const draw = () => {
 		if (!canvas || !wrapper) return;
 
-		const ctx = canvas.getContext('2d');
+		const bounds = wrapper.getBoundingClientRect();
+		const w = Math.floor(bounds.width);
+		const h = Math.floor(bounds.height);
+
+		if (w === lastDrawWidth && h === lastDrawHeight) return;
+		lastDrawWidth = w;
+		lastDrawHeight = h;
+
+		debugLog(`Drawing canvas at ${w}x${h} with scale ${scale}`, { level: 'info' });
+
+		const dpr = window.devicePixelRatio || 1;
+		canvas.width = w * dpr;
+		canvas.height = h * dpr;
+		canvas.style.width = `${w}px`;
+		canvas.style.height = `${h}px`;
+
+		ctx = canvas.getContext('2d');
 		if (!ctx) return;
 
-		const { width, height } = wrapper.getBoundingClientRect();
-		canvas.width = width;
-		canvas.height = height;
+		ctx.setTransform(1, 0, 0, 1, 0, 0);
+		ctx.scale(dpr, dpr);
 
 		ctx.save();
-		ctx.clearRect(0, 0, canvas.width, canvas.height);
+		ctx.clearRect(0, 0, w, h);
 		ctx.translate(offsetX, offsetY);
 		ctx.scale(scale, scale);
 
@@ -169,8 +151,6 @@
 		}
 
 		ctx.restore();
-
-		console.log('Redraw triggered');
 	};
 
 	const onWheel = (event: WheelEvent) => {
@@ -247,71 +227,72 @@
 	};
 </script>
 
-<svelte:window
-	on:resize={() => {
-		if (canvas) {
-			canvas.width = window.innerWidth;
-			canvas.height = window.innerHeight;
-		}
-	}}
-/>
-
-<div
-	class="view-wrapper"
-	bind:this={wrapper}
-	onwheel={onWheel}
-	onpointerdown={onPointerDown}
-	onpointermove={onPointerMove}
-	onpointerup={onPointerUp}
-	onpointerleave={onPointerUp}
-	style={debug ? 'outline: 1px solid red;' : ''}
->
-	<canvas bind:this={canvas}> Your browser does not support the HTML5 canvas tag. </canvas>
-	<p style="color:white;position:absolute;bottom:10px;left:10px;">
-		Zoom: {scale.toFixed(2)}, Pan: ({offsetX}, {offsetY})
-	</p>
-	<div class="controls">
-		<button onclick={zoomIn}>Zoom In</button>
-		<button onclick={zoomOut}>Zoom Out</button>
-		<button onclick={resetView}>Reset View</button>
-		<button onclick={fitToScreen}>Fit to Screen</button>
+<div class="viewer-container">
+	<div class="main-view">
+		<input
+			type="file"
+			accept=".dcm"
+			onchange={(e) => {
+				// Add file to the files list
+				const target = e.target as HTMLInputElement;
+				files = target.files;
+				if (files) {
+					file = files[0]; // Get the first file
+				} else {
+					file = null; // Reset if no files selected
+				}
+			}}
+		/>
+		<Controls {zoomIn} {zoomOut} {resetView} {fitToScreen} {showMetadata} />
+		<div
+			class="view-wrapper"
+			bind:this={wrapper}
+			onwheel={onWheel}
+			onpointerdown={onPointerDown}
+			onpointermove={onPointerMove}
+			onpointerup={onPointerUp}
+			onpointerleave={onPointerUp}
+		>
+			<canvas bind:this={canvas}> Your browser does not support the HTML5 canvas tag. </canvas>
+			<p class="overlay">
+				Zoom: {scale.toFixed(2)}, Pan: ({offsetX}, {offsetY})
+			</p>
+		</div>
 	</div>
+	{#if showMetadata}<Metadata {elements} />{/if}
+	<Console {logs} {visible} />
 </div>
 
 <style>
+	.viewer-container {
+		display: flex;
+		flex-direction: column;
+	}
+	.main-view {
+		display: flex;
+		flex: 1;
+		position: relative;
+		flex-direction: column;
+	}
 	.view-wrapper {
 		position: relative;
-		width: 100%;
-		height: 100%;
-		overflow: hidden;
+		flex: 1;
 		background: black;
 		touch-action: none;
 	}
 	canvas {
-		background: black;
 		display: block;
 		image-rendering: pixelated;
 		width: 100%;
 		height: 100%;
 		z-index: 1;
 	}
-	.controls {
-		display: flex;
+	.overlay {
+		color: white;
 		position: absolute;
-		top: 10px;
+		font-size: 0.8rem;
+		font-family: 'monospace';
+		bottom: 10px;
 		left: 10px;
-		gap: 6px;
-		z-index: 10;
-	}
-	.controls button {
-		padding: 4px 8px;
-		font-size: 0.9rem;
-		border-radius: 4px;
-		border: none;
-		background-color: #fff;
-		cursor: pointer;
-	}
-	.controls button:hover {
-		background-color: #ddd;
 	}
 </style>

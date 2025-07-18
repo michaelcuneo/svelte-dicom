@@ -39,6 +39,11 @@ npm i @michaelcuneo/svelte-dicom
 <Dicom {files} />
 ```
 
+## What works.
+
+- Decode uncompressed Uin8/Uint16 DICOM to Canvas.
+- Zoom in/out, Pan, Fit to Screen.
+
 ## Todo
 
 - Decode/Encode for Uncompressed, Lossless, Lossy and RLE.
