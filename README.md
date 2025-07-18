@@ -4,7 +4,7 @@ Svelte-Dicom evening project, based on Reddit comment. [text](https://www.reddit
 
 I like a challenge, to keep myself entertained of an evening after the 9-5... this medical tool pairs well with my research projects at The University of Newcastle... so here goes nothing,... or something. DICOM imaging tool for SvelteKit on the way.
 
-![image](https://halide.michaelcuneo.com.au/misc/Screenshot%202025-07-17%20180143.png)
+![image](https://halide.michaelcuneo.com.au/misc/dicom-viewer-1.png)
 
 ## Installation
 
@@ -17,24 +17,24 @@ npm i @michaelcuneo/svelte-dicom
 
 ```javascript
 <script lang="ts">
-	let file = $state<File | null>(null);
-	let files = $state<FileList | null>(null);
-	import Dicom from '@michaelcuneo/svelte-dicom';
+  let file = $state<File | null>(null);
+  let files = $state<FileList | null>(null);
+  import Dicom from '@michaelcuneo/svelte-dicom';
 </script>
 
 <input
-	type="file"
-	accept=".dcm"
-	onchange={(e) => {
-		// Add file to the files list
-		const target = e.target as HTMLInputElement;
-		files = target.files;
-		if (files) {
-			file = files[0]; // Get the first file
-		} else {
-			file = null; // Reset if no files selected
-		}
-	}}
+  type="file"
+  accept=".dcm"
+  onchange={(e) => {
+    // Add file to the files list
+    const target = e.target as HTMLInputElement;
+    files = target.files;
+    if (files) {
+      file = files[0]; // Get the first file
+    } else {
+      file = null; // Reset if no files selected
+    }
+  }}
 />
 <Dicom {files} />
 ```

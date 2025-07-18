@@ -8,13 +8,13 @@
 
 	let wrapper: HTMLDivElement | undefined = $state(undefined);
 	let canvas: HTMLCanvasElement | undefined = $state(undefined);
-	let ctx: CanvasRenderingContext2D | undefined = $state(undefined);
+	let ctx: CanvasRenderingContext2D | null = $state(null);
 
 	let debug: boolean = $state(true);
 
 	let pixelBuffer: ImageData | null = $state(null);
-	let width: number = 256;
-	let height: number = 256;
+	let width: number = $state(256);
+	let height: number = $state(256);
 
 	// State variables for zoom and pan
 	let scale: number = $state(1.0);
@@ -36,19 +36,34 @@
 
 	const loadDicomFile = async (file: File) => {
 		const buffer = await file.arrayBuffer();
-		const tmpParser = new DICOMParser(buffer); // use default syntax
+		const tmpParser = new DICOMParser(buffer);
 		const meta = tmpParser.parseMeta();
 		const transferSyntax: TransferSyntax = tmpParser.getTransferSyntaxFromMeta(meta);
-
 		const parser = new DICOMParser(buffer, transferSyntax);
-
 		elements = parser.parse();
-		console.log(
-			'Parsed elements:',
-			elements.map((el) => el.tag)
-		);
 
-		// Search the raw buffer for 7FE0,0010 in little endian: e0 7f 10 00
+		const rowsEl = elements.find((el) => el.tag === '0028,0010');
+		const colsEl = elements.find((el) => el.tag === '0028,0011');
+		const rows = Number(rowsEl?.value) || 1024;
+		const cols = Number(colsEl?.value) || 1024;
+
+		const bitsAllocated = Number(elements.find((el) => el.tag === '0028,0100')?.value) || 8;
+		const samplesPerPixel = Number(elements.find((el) => el.tag === '0028,0002')?.value) || 1;
+		const photoInterp =
+			elements.find((el) => el.tag === '0028,0004')?.value?.toString() || 'MONOCHROME2';
+		const windowCenter = Number(elements.find((el) => el.tag === '0028,1050')?.value) || 128;
+		const windowWidth = Number(elements.find((el) => el.tag === '0028,1051')?.value) || 256;
+		const inverted = photoInterp === 'MONOCHROME1';
+
+		console.log({ rowsEl, colsEl });
+
+		const applyWindow = (val: number) => {
+			const min = windowCenter - windowWidth / 2;
+			const max = windowCenter + windowWidth / 2;
+			const scaled = ((val - min) / (max - min)) * 255;
+			return Math.min(255, Math.max(0, scaled));
+		};
+
 		const bytes = new Uint8Array(buffer);
 		for (let i = 0; i < bytes.length - 4; i++) {
 			if (
@@ -57,62 +72,59 @@
 				bytes[i + 2] === 0x10 &&
 				bytes[i + 3] === 0x00
 			) {
-				console.log('Found Pixel Data marker at offset', i);
+				const pixelStart = i + 8;
+				const imageData = new ImageData(cols, rows);
+
+				if (bitsAllocated === 16) {
+					const raw = new Uint16Array(buffer, pixelStart, rows * cols);
+					const imageData = new ImageData(cols, rows);
+					for (let j = 0; j < raw.length; j++) {
+						const mapped = applyWindow(raw[j]);
+						const val = inverted ? 255 - mapped : mapped;
+						imageData.data[j * 4 + 0] = val;
+						imageData.data[j * 4 + 1] = val;
+						imageData.data[j * 4 + 2] = val;
+						imageData.data[j * 4 + 3] = 255;
+					}
+					pixelBuffer = imageData;
+					imageBitmap = await createImageBitmap(imageData);
+				} else if (samplesPerPixel === 1) {
+					const raw = new Uint8Array(buffer, pixelStart, rows * cols);
+					const imageData = new ImageData(cols, rows);
+					for (let j = 0; j < raw.length; j++) {
+						const mapped = applyWindow(raw[j]);
+						const val = inverted ? 255 - mapped : mapped;
+						imageData.data[j * 4 + 0] = val;
+						imageData.data[j * 4 + 1] = val;
+						imageData.data[j * 4 + 2] = val;
+						imageData.data[j * 4 + 3] = 255;
+					}
+					pixelBuffer = imageData;
+					imageBitmap = await createImageBitmap(imageData);
+				} else if (samplesPerPixel === 3) {
+					const raw = new Uint8Array(buffer, pixelStart, rows * cols * 3);
+					const imageData = new ImageData(cols, rows);
+					for (let i = 0; i < cols * rows; i++) {
+						const base = i * 3;
+						imageData.data[i * 4 + 0] = raw[base + 0]; // R
+						imageData.data[i * 4 + 1] = raw[base + 1]; // G
+						imageData.data[i * 4 + 2] = raw[base + 2]; // B
+						imageData.data[i * 4 + 3] = 255;
+					}
+					pixelBuffer = imageData;
+					imageBitmap = await createImageBitmap(imageData);
+				}
+
+				width = cols;
+				height = rows;
+				fitToScreen();
+				draw();
 				break;
 			}
 		}
-
-		// Assume 512x512 grayscale image starting at 1400
-		const pixelStart = 1400 + 8; // skip tag and 4-byte length
-		const pixelLength = 512 * 512;
-		const pixelBytes = new Uint8Array(buffer, pixelStart, pixelLength);
-
-		const imageData = new ImageData(512, 512);
-		for (let i = 0; i < pixelBytes.length; i++) {
-			const v = pixelBytes[i];
-			imageData.data[i * 4 + 0] = v;
-			imageData.data[i * 4 + 1] = v;
-			imageData.data[i * 4 + 2] = v;
-			imageData.data[i * 4 + 3] = 255;
-		}
-
-		pixelBuffer = imageData;
-		width = 512;
-		height = 512;
-		fitToScreen();
-		draw();
-
-		/*
-		const pixel = elements.find((el) => el.tag === '7FE0,0010');
-
-		console.log('Transfer Syntax UID:', transferSyntax?.uid);
-		console.log('Pixel tag:', pixel);
-
-		if (pixel?.value instanceof Uint8Array) {
-			console.warn('Uncompressed pixel data found — not yet handled');
-		} else if (Array.isArray(pixel?.value)) {
-			const fragment = pixel.value[0]?.elements?.[0]?.value;
-			console.log('Fragment:', fragment);
-			if (fragment instanceof Uint8Array) {
-				const blob = new Blob([fragment], { type: 'image/jpeg' });
-				imageBitmap = await createImageBitmap(blob);
-				console.log('Decoded imageBitmap:', imageBitmap?.width, imageBitmap?.height);
-				width = imageBitmap.width;
-				height = imageBitmap.height;
-				fitToScreen();
-				draw();
-			} else {
-				console.warn('Invalid fragment type:', typeof fragment);
-			}
-		} else {
-			console.warn('Unhandled pixel value format:', typeof pixel?.value);
-		}
-		*/
 	};
 
 	onMount(() => {
-		// Initialize canvas and pixel buffer
-		// Ensure canvas and wrapper are defined
 		if (!wrapper || typeof window === 'undefined') return;
 
 		// Set canvas dimensions to match the wrapper
@@ -138,26 +150,27 @@
 	});
 
 	const draw = () => {
-		if (typeof window === 'undefined' || !canvas || !wrapper) return;
+		if (!canvas || !wrapper) return;
 
-		const ctx = canvas?.getContext('2d');
+		const ctx = canvas.getContext('2d');
 		if (!ctx) return;
 
-		const { width, height } = wrapper?.getBoundingClientRect();
+		const { width, height } = wrapper.getBoundingClientRect();
 		canvas.width = width;
 		canvas.height = height;
 
 		ctx.save();
-		ctx.clearRect(0, 0, width, height);
-		ctx.setTransform(scale, 0, 0, scale, offsetX, offsetY);
+		ctx.clearRect(0, 0, canvas.width, canvas.height);
+		ctx.translate(offsetX, offsetY);
+		ctx.scale(scale, scale);
+
 		if (imageBitmap) {
 			ctx.drawImage(imageBitmap, 0, 0);
-		} else if (pixelBuffer) {
-			ctx.putImageData(pixelBuffer, 0, 0);
 		}
+
 		ctx.restore();
 
-		console.log('Draw called. ImageBitmap:', !!imageBitmap);
+		console.log('Redraw triggered');
 	};
 
 	const onWheel = (event: WheelEvent) => {
@@ -254,6 +267,9 @@
 	style={debug ? 'outline: 1px solid red;' : ''}
 >
 	<canvas bind:this={canvas}> Your browser does not support the HTML5 canvas tag. </canvas>
+	<p style="color:white;position:absolute;bottom:10px;left:10px;">
+		Zoom: {scale.toFixed(2)}, Pan: ({offsetX}, {offsetY})
+	</p>
 	<div class="controls">
 		<button onclick={zoomIn}>Zoom In</button>
 		<button onclick={zoomOut}>Zoom Out</button>
@@ -272,10 +288,12 @@
 		touch-action: none;
 	}
 	canvas {
+		background: black;
 		display: block;
 		image-rendering: pixelated;
 		width: 100%;
 		height: 100%;
+		z-index: 1;
 	}
 	.controls {
 		display: flex;
