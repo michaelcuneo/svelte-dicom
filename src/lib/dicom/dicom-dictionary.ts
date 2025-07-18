@@ -6,7 +6,7 @@ export interface DICOMEntry {
 	version: string; // Version of the DICOM standard this entry belongs to
 }
 
-export const dictionary: Record<string, DICOMEntry>[] = {
+export const dictionary: Record<string, DICOMEntry> = {
 	'(0000,0000)': {
 		tag: '(0000,0000)',
 		vr: 'UL',
