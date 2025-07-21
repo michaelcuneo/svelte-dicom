@@ -49,12 +49,13 @@
 <style>
 	.metadata-panel {
 		min-width: 320px;
-		background: #1b1b1b;
-		color: white;
+		width: 100%;
+		background: var(--color-surface);
+		color: var(--color-text);
 		overflow-y: scroll;
 		padding: 1rem;
 		font-family: monospace;
-		border-left: 1px solid #333;
+		border-left: 1px solid var(--color-border);
 	}
 	.metadata-panel table {
 		width: 100%;
@@ -63,12 +64,12 @@
 	}
 	.metadata-panel th,
 	.metadata-panel td {
-		border: 1px solid #333;
+		border: 1px solid var(--color-border);
 		padding: 4px 6px;
 		text-align: left;
 	}
 	.metadata-panel th {
-		background: #222;
+		background: var(--color-header);
 		font-weight: bold;
 	}
 </style>

@@ -1,14 +1,9 @@
 <script lang="ts">
-	import { logs, visible, filters } from '$lib/dicom/debugStore.js';
+	import { type Logger, logs, visible, filters } from '$lib/dicom/debugStore.js';
 	import { onMount } from 'svelte';
 
-	type Filter = {
-		level: 'all' | 'info' | 'warn' | 'error' | 'debug' | 'success';
-		category: string;
-	};
-
-	let filter: Filter = { level: 'all', category: 'all' };
-	let filtered: Filter[] = $state([]);
+	let filter: { level: string, category: string } = $state({ level: 'all', category: 'all' });
+	let filtered: Logger[] = $state([]);
 
 	onMount(() => {
 		window.addEventListener('keydown', (e) => {
@@ -18,7 +13,7 @@
 
 	$effect(() => {
 		filters.set(filter);
-		filtered = $logs.filter((log: Filter) => {
+		filtered = $logs.filter((log: Logger) => {
 			const levelMatch = filter.level === 'all' || log.level === filter.level;
 			const categoryMatch = filter.category === 'all' || log.category === filter.category;
 			return levelMatch && categoryMatch;
@@ -37,7 +32,8 @@
 {#if $visible}
 	<div class="console">
 		<div class="header">
-			<span>🛠 Debug Console</span>
+			<span class="material-icons">bug_report</span>
+			<span>Debug Console</span>
 			<select bind:value={filter.level}>
 				<option value="all">All Levels</option>
 				<option value="info">Info</option>
@@ -48,7 +44,7 @@
 			</select>
 			<select bind:value={filter.category}>
 				<option value="all">All Categories</option>
-				{#each Array.from(new Set($logs.map((l: Filter) => l.category))) as cat}
+				{#each Array.from(new Set($logs.map((l: Logger) => l.category))) as cat}
 					<option value={cat}>{cat}</option>
 				{/each}
 			</select>
@@ -61,7 +57,7 @@
 						<code>[{log.timestamp}]</code>
 						<span class="category">{log.category}</span>
 						<span class="level">[{log.level.toUpperCase()}]</span>
-						<button onclick={() => copy(log.text)}>📋</button>
+						<button class="copy" onclick={() => copy(log.text || '')}>📋</button>
 					</summary>
 					<pre>{log.text}</pre>
 				</details>
@@ -73,9 +69,9 @@
 <style>
 	.console {
 		position: absolute;
-		bottom: 1rem;
-		left: 1rem;
-		width: 500px;
+		bottom: 0.6rem;
+		left: 0.6rem;
+		min-width: 500px;
 		max-height: 50vh;
 		background-color: rgba(0, 0, 0, 0.85);
 		color: #0f0;
@@ -86,11 +82,13 @@
 		padding: 0.5rem;
 		overflow-y: auto;
 		z-index: 10000;
+		pointer-events: all;
 	}
 	.console-header {
 		display: flex;
-		justify-content: space-between;
-		margin-bottom: 0.5rem;
+		align-items: center;
+		gap: 0.5rem;
+		height: 1rem;
 		font-weight: bold;
 	}
 	.console-body {
@@ -144,6 +142,13 @@
 		color: #0f0;
 	}
 	button {
+		cursor: pointer;
+	}
+	.copy {
+		background: none;
+		border: none;
+		color: #0f0;
+		font-size: 0.75rem;
 		cursor: pointer;
 	}
 </style>

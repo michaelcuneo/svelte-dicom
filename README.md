@@ -41,8 +41,11 @@ npm i @michaelcuneo/svelte-dicom
 
 ## What works.
 
-- Decode uncompressed Uin8/Uint16 DICOM to Canvas.
+- Decode uncompressed raw Uin8 DICOM to Canvas. (1.2.840.10008.1.2.1)
 - Zoom in/out, Pan, Fit to Screen.
+- Validation on upload.
+- Tabbed interface, for upload, view, and metadata.
+- Full developer debug console. Accessed with (Console button or `)
 
 ## Todo
 
@@ -55,4 +58,4 @@ npm i @michaelcuneo/svelte-dicom
 
 ## Problems
 
-- The parser is broken with my test file, and I am forced to give a fixed offset of 1400 to render the first test image.
+- Only loads Unencapsulated Raw and JPEG
