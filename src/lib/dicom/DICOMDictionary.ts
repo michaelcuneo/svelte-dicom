@@ -20,5 +20,5 @@ export const getElementKeyword = (tag: string): string => {
 
 export const isPixelData = (tag: string): boolean => {
 	const cleanTag = tag.replace(/[()]/g, '').toUpperCase();
-	return cleanTag === '(7FE0,0010)' ? true : false;
+	return cleanTag === '7FE00010' ? true : false;
 };

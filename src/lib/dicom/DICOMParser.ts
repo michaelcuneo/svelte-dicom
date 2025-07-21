@@ -1,12 +1,13 @@
 import { ByteStream } from './ByteStream.js';
 import { getTransferSyntax } from './TransferSyntax.js';
 import { lookupVR, isPixelData } from './DICOMDictionary.js';
+import { debugLog } from './debugStore.js';
 
 export interface DataElement {
 	tag: string;
 	vr: string;
 	length: number;
-	value: string | number | Uint8Array | null;
+	value: string | number | Uint8Array | Uint8Array[] | null;
 }
 
 export interface TransferSyntax {
@@ -56,12 +57,7 @@ export class DICOMParser {
 			const after = this.byteStream.getPosition();
 
 			if (!el || after === before) break;
-
 			elements.push(el);
-			if (this.transferSyntax.isEncapsulated && isPixelData(el.tag)) {
-				console.log('Found encapsulated Pixel Data tag:', el.tag);
-				elements.push(el);
-			}
 		}
 		return elements;
 	}
@@ -92,8 +88,27 @@ export class DICOMParser {
 			}
 
 			if (length === 0xffffffff) {
-				// undefined-length sequence — skip
-				return { tag, vr, length, value: null };
+				if (isPixelData(tag) && this.transferSyntax.isEncapsulated) {
+					const fragments: Uint8Array[] = [];
+					while (true) {
+						const itemTagGroup = this.byteStream.readUint16(true);
+						const itemTagElement = this.byteStream.readUint16(true);
+						const itemTag =
+							`${itemTagGroup.toString(16).padStart(4, '0')},${itemTagElement.toString(16).padStart(4, '0')}`.toUpperCase();
+						if (itemTag === 'FFFE,E0DD') {
+							this.byteStream.readUint32(true); // skip length
+							break;
+						}
+						if (itemTag !== 'FFFE,E000') break;
+
+						const itemLength = this.byteStream.readUint32(true);
+						const itemBytes = this.byteStream.readBytes(itemLength);
+						fragments.push(itemBytes);
+					}
+					return { tag, vr, length, value: fragments };
+				} else {
+					return { tag, vr, length, value: null }; // for non-pixel-data undefined length
+				}
 			}
 
 			if (this.byteStream.getPosition() + length > this.byteStream.getLength()) return null;
@@ -103,7 +118,7 @@ export class DICOMParser {
 
 			return { tag, vr, length, value };
 		} catch (e) {
-			console.error('Error parsing element:', e);
+			debugLog(`Error parsing DICOM element: ${e}`, { level: 'error', category: 'DICOM' });
 			return null;
 		}
 	}
