@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { type Logger, logs, visible, filters } from '$lib/dicom/debugStore.js';
+	import { logs, visible, filters } from '$lib/dicom/utils/debugStore.js';
+	import type { Logger } from '$lib/dicom/types/types.js';
 	import { onMount } from 'svelte';
 
 	let filter: { level: string, category: string } = $state({ level: 'all', category: 'all' });

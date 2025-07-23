@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { DICOMParser } from '$lib/dicom/DICOMParser.js';
-  import { isTransferSyntaxSupported } from '$lib/dicom/TransferSyntax.js';
-  import { debugLog } from '$lib/dicom/debugStore.js';
+  import { DICOMParser } from '$lib/dicom/parser/DICOMParser.js';
+  import { isTransferSyntaxSupported } from '$lib/dicom/parser/meta/TransferSyntax.js';
+  import { debugLog } from '$lib/dicom/utils/debugStore.js';
 
   let { file }: { file: File | null } = $props();
 

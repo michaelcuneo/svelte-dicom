@@ -1,4 +1,4 @@
-import type { TransferSyntaxInfo } from './types.js';
+import type { TransferSyntaxInfo } from '../../types/types.js';
 
 export const TRANSFER_SYNTAX_MAP: Record<string, Partial<TransferSyntaxInfo>> = {
 	'1.2.840.10008.1.2': {
@@ -218,4 +218,8 @@ export function getTransferSyntaxInfo(uid: string): TransferSyntaxInfo {
 		isEncapsulated: base.isEncapsulated ?? false,
 		name: base.name
 	};
+}
+
+export function isTransferSyntaxSupported(uid: string): boolean {
+	return !!TRANSFER_SYNTAX_MAP[uid];
 }

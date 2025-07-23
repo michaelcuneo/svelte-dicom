@@ -57,6 +57,22 @@ class BitReader {
 	}
 }
 
+function ycbcrToRgb(Y: number, Cb: number, Cr: number): [number, number, number] {
+	const y = Y;
+	const cb = Cb - 128;
+	const cr = Cr - 128;
+
+	const r = clamp(y + 1.402 * cr);
+	const g = clamp(y - 0.344136 * cb - 0.714136 * cr);
+	const b = clamp(y + 1.772 * cb);
+
+	return [r, g, b];
+}
+
+function clamp(value: number): number {
+	return Math.min(255, Math.max(0, Math.round(value)));
+}
+
 function zigZagInverse(input: number[]): number[] {
 	const zigZag = [
 		0, 1, 5, 6, 14, 15, 27, 28, 2, 4, 7, 13, 16, 26, 29, 42, 3, 8, 12, 17, 25, 30, 41, 43, 9, 11,
@@ -138,39 +154,42 @@ function idct8x8(input: number[]): number[] {
 	return output;
 }
 
-function clamp(v: number): number {
-	return Math.min(255, Math.max(0, 128 + Math.round(v)));
-}
-
 export function decodeJPEG(
 	raw: Uint8Array,
+	huffmanTablesAC: { [id: number]: HuffmanTable },
+	huffmanTablesDC: { [id: number]: HuffmanTable },
 	options?: Partial<JPEGDecodeOptions>
 ): JPEGDecodeResult {
-	// ... assume previous header and table parsing already done (e.g., DQT, DHT, SOF, SOS)
-	// This simplified decoder assumes 4:4:4 sampling, baseline JPEG, 8-bit, 3 components
-
 	const width = options?.width ?? 256;
 	const height = options?.height ?? 256;
 	const components = options?.samplesPerPixel ?? 3;
+	const blockSize = 8; // Process data in 8x8 blocks
+	const pixels = new Uint8ClampedArray(width * height * 4); // RGBA output
 
-	const blockSize = 8;
-	const pixels = new Uint8ClampedArray(width * height * 4);
+	// Initialize the BitReader
+	const reader = new BitReader(raw);
 
 	for (let y = 0; y < height; y += blockSize) {
 		for (let x = 0; x < width; x += blockSize) {
-			// For now, fill dummy 8x8 blocks
+			// Read 8x8 block for YCbCr components
 			const blockY = new Array(64).fill(128);
 			const blockCb = new Array(64).fill(128);
 			const blockCr = new Array(64).fill(128);
 
+			// Decode the blocks using Huffman tables (DC and AC coefficients)
+			decodeBlock(reader, blockY, blockCb, blockCr, huffmanTablesDC, huffmanTablesAC);
+
+			// Apply zigzag reordering
 			const zzY = zigZagInverse(blockY);
 			const zzCb = zigZagInverse(blockCb);
 			const zzCr = zigZagInverse(blockCr);
 
+			// Apply Inverse Discrete Cosine Transform (IDCT)
 			const idctY = idct8x8(zzY);
 			const idctCb = idct8x8(zzCb);
 			const idctCr = idct8x8(zzCr);
 
+			// Write the processed data back into the pixel array
 			for (let j = 0; j < 64; j++) {
 				const dx = j % 8;
 				const dy = Math.floor(j / 8);
@@ -199,4 +218,33 @@ export function decodeJPEG(
 		height,
 		components
 	};
+}
+
+/**
+ * Decode one block using Huffman tables.
+ */
+function decodeBlock(
+	reader: BitReader,
+	blockY: number[],
+	blockCb: number[],
+	blockCr: number[],
+	huffmanTablesDC: { [id: number]: HuffmanTable },
+	huffmanTablesAC: { [id: number]: HuffmanTable }
+): void {
+	// Example Huffman decoding for Y, Cb, Cr blocks
+	// Decode DC (first value)
+	blockY[0] = reader.readHuffman(huffmanTablesDC[0]);
+	blockCb[0] = reader.readHuffman(huffmanTablesDC[1]);
+	blockCr[0] = reader.readHuffman(huffmanTablesDC[2]);
+
+	// Decode AC (remaining values)
+	for (let i = 1; i < 64; i++) {
+		const symbolY = reader.readHuffman(huffmanTablesAC[0]);
+		const symbolCb = reader.readHuffman(huffmanTablesAC[1]);
+		const symbolCr = reader.readHuffman(huffmanTablesAC[2]);
+
+		blockY[i] = symbolY;
+		blockCb[i] = symbolCb;
+		blockCr[i] = symbolCr;
+	}
 }

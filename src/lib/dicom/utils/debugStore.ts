@@ -1,19 +1,11 @@
 import { writable } from 'svelte/store';
 import type { Writable } from 'svelte/store';
 
+import type { Logger } from '$lib/dicom/types/types.js';
+
 export const logs: Writable<Logger[]> = writable<Logger[]>([]);
 export const visible: Writable<boolean> = writable(false);
 export const filters = writable({ level: 'all', category: 'all' });
-
-export type Logger = {
-	id: number;
-	text?: string;
-	timestamp?: string;
-	level: 'all' | 'info' | 'warn' | 'error' | 'debug' | 'success' | string;
-	raw?: string | object;
-	category: string;
-	isObject?: boolean;
-};
 
 let counter = 0;
 
