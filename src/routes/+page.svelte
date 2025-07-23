@@ -5,7 +5,7 @@
 <div class="main">
 	<h1>Svelte Dicom Viewer Example</h1>
 	<div class="dicom-viewer">
-		<Dicom console={true} overlay={true} height={800} width={1200} />
+		<Dicom enableConsole={true} enableOverlay={true} height={800} width={1200} />
 	</div>
 </div>
 

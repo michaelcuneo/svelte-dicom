@@ -1,6 +1,6 @@
 // ImageInfo.ts
 
-import type { DICOMDataSet, ImageInfo } from './types.js';
+import type { DICOMDataSet, ImageInfo } from '$lib/dicom/types/types.js';
 
 export function extractImageInfo(dataSet: DICOMDataSet): ImageInfo {
 	const getString = (tag: string): string => {

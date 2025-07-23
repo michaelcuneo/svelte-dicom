@@ -1,16 +1,18 @@
-// PixelDataLayer.ts
+import { debugLog } from '$lib/dicom/utils/debugStore.js';
+import type { DICOMDataSet, DICOMPixelData, TransferSyntaxInfo } from '../../types/types.js';
 
-import type { DICOMDataSet, DICOMPixelData, TransferSyntaxInfo } from './types.js';
-
-/**
- * Extracts the raw pixel data element from a dataset.
- * Handles native and encapsulated pixel data (Basic Offset Table + fragments).
- */
 export function extractPixelData(
 	dataSet: DICOMDataSet,
 	transferSyntax: TransferSyntaxInfo
 ): DICOMPixelData | undefined {
-	const pixelElement = dataSet.get('7fe0,0010');
+	const pixelElement = dataSet.get('7FE0,0010');
+	debugLog(`Extracting pixel data for transfer syntax: ${transferSyntax.uid}`, {
+		level: 'debug',
+		category: 'DICOM'
+	});
+	console.log('keys in dataSet:', [...dataSet.keys()]);
+	console.log('pixelElement:', pixelElement);
+
 	if (!pixelElement || !(pixelElement.value instanceof Uint8Array)) return undefined;
 
 	const buffer = new DataView(

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { lookupVR, getElementKeyword } from '$lib/dicom/DICOMDictionary.js';
+	import { lookupVR, getElementKeyword } from '$lib/dicom/parser/meta/DICOMDictionary.js';
 
 	function formatValue(value: any, tag: string): string {
 		const vr = lookupVR(tag);

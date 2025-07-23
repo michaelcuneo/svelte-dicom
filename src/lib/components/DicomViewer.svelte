@@ -1,23 +1,25 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { DICOMParser } from '$lib/dicom/DICOMParser.js';
-	import { loadPixelData, type PixelInfo } from '$lib/dicom/loadPixelData.js';
+	import { DICOMParser } from '$lib/dicom/parser/DICOMParser.js';
+	import { loadPixelData } from '$lib/dicom/loadPixelData.js';
+	import { convertToRGBA } from '$lib/dicom/parser/image/ColorModel.js';
 	import Console from './Console.svelte';
 	import Metadata from './Metadata.svelte';
 	import Controls from './Controls.svelte';
 	import Validate from './ValidateDicom.svelte';
+	import type { PixelInfo } from '$lib/dicom/types/types.js';
 
-	import { logs, visible, debugLog } from '$lib/dicom/debugStore.js';
+	import { logs, visible, debugLog } from '$lib/dicom/utils/debugStore.js';
 	import FileDropper from './FileDropper.svelte';
 
 	let {
-		console = $bindable(false),
-		overlay = $bindable(false),
+		enableConsole = $bindable(false),
+		enableOverlay = $bindable(false),
 		height = 600,
 		width = 800
 	}: {
-		console?: boolean;
-		overlay?: boolean;
+		enableConsole?: boolean;
+		enableOverlay?: boolean;
 		height?: number;
 		width?: number;
 	} = $props();
@@ -40,7 +42,6 @@
 	let lastDrawWidth: number = $state(0);
 	let lastDrawHeight: number = $state(0);
 
-	let imageBitmap: ImageBitmap | null = $state(null);
 	let elements: Array<{ tag: string; value: any }> = $state([]);
 	let pixelInfo: PixelInfo | null = $state(null);
 	let currentFrame: number = $state(0);
@@ -52,47 +53,32 @@
 			loadDicomFile(files[0]);
 		}
 		if (activeTab === 'viewer' && pixelInfo) {
-			imageBitmap = pixelInfo.bitmaps[currentFrame];
 			draw();
 		}
 	});
 
 	const loadDicomFile = async (file: File) => {
-		// Loading the DICOM file.
-		debugLog(`Loading DICOM file: ${file.name}`, { level: 'info', category: 'parse'});
+		debugLog(`Loading DICOM file: ${file.name}`, { level: 'info', category: 'parse' });
 		const buffer = await file.arrayBuffer();
-		// Log file size and initial metadata
-		debugLog(`File loaded: ${file.name}`, { level: 'info' });
-		debugLog(`Buffer size: ${buffer.byteLength} bytes`, { level: 'info', category: 'parse' });
-		// Step 1: Parse file meta header (group 0002)
-		debugLog('Parsing DICOM meta header', { level: 'info', category: 'parse' });
-		
-		// Create a new parser for the meta header
 		const metaParser = new DICOMParser(buffer);
 		const meta = metaParser.parseMeta();
 		const transferSyntax = metaParser.getTransferSyntaxFromMeta(meta);
 		const datasetOffset = metaParser.getOffset();
 
-		// Step 2: Parse the DICOM dataset
 		debugLog(`Parsing DICOM dataset at offset: ${datasetOffset} with a transferSyntax of ${transferSyntax.uid}`, { level: 'info', category: 'parse' });
 		const parser = new DICOMParser(buffer, transferSyntax);
 		parser.byteStream.seek(datasetOffset);
 		elements = parser.parse();
 
-		// Step 3: Load pixel data (handles uncompressed, JPEG, color, etc.)
 		debugLog(`Loading pixel data for ${elements.length} elements`, { level: 'info', category: 'parse' });
 		pixelInfo = await loadPixelData(buffer, elements, transferSyntax.uid);
+		debugLog(`pixelInfo: ${pixelInfo}`, { level: 'debug', category: 'parse' });
+		debugLog(`frame 0: ${pixelInfo?.frames?.[0]}`, { level: 'debug', category: 'parse' });
+
 		currentFrame = 0;
 
 		if (pixelInfo) {
-			debugLog(`Pixel data loaded: ${pixelInfo.bitmaps.length} bitmaps`, { level: 'info', category: 'parse' });
-		} else {
-			debugLog('No pixel data found', { level: 'error', category: 'parse' });
-		}
-
-		// Step 4: Assign imageBitmap and trigger draw
-		if (pixelInfo?.bitmaps?.[0]) {
-			imageBitmap = pixelInfo.bitmaps[0];
+			debugLog(`Pixel data loaded: ${pixelInfo.frames.length} frame(s)`, { level: 'info', category: 'parse' });
 			width = pixelInfo.width;
 			height = pixelInfo.height;
 			fitToScreen();
@@ -101,32 +87,13 @@
 			debugLog('No pixel data could be extracted.', { level: 'error', category: 'parse' });
 		}
 
-		debugLog(`DICOM file ${file.name} loaded successfully`, { level: 'success', category: 'parse' });
+		debugLog(`DICOM file \${file.name} loaded successfully`, { level: 'success', category: 'parse' });
 	};
 
 	onMount(() => {
 		if (!wrapper || typeof window === 'undefined') return;
-
 		if (!canvas) return;
-		
-		if (!ctx) {
-			ctx = canvas.getContext('2d');
-		}
-
-		const buffer = new Uint8Array(width * height);
-		const imageData = new ImageData(width, height);
-
-		for (let i = 0; i < buffer.length; i++) {
-			buffer[i] = Math.floor(Math.random() * 256); // Fill with random pixel values
-		}
-
-		for (let i = 0; i < width * height; i++) {
-			const index = buffer[i];
-			imageData.data[i * 4] = index; // Red
-			imageData.data[i * 4 + 1] = index; // Green
-			imageData.data[i * 4 + 2] = index; // Blue
-			imageData.data[i * 4 + 3] = 255; // Alpha
-		}
+		if (!ctx) ctx = canvas.getContext('2d');
 
 		const resize = new ResizeObserver(() => draw());
 		resize.observe(wrapper);
@@ -135,13 +102,12 @@
 	});
 
 	const draw = () => {
-		if (!canvas || !wrapper) return;
+		if (!canvas || !wrapper || !pixelInfo || !ctx) return;
 
 		const bounds = wrapper.getBoundingClientRect();
 		const w = Math.floor(bounds.width);
 		const h = Math.floor(bounds.height);
 
-		// if (w === lastDrawWidth && h === lastDrawHeight) return;
 		lastDrawWidth = w;
 		lastDrawHeight = h;
 
@@ -150,8 +116,6 @@
 		canvas.height = h * dpr;
 		canvas.style.width = `${w}px`;
 		canvas.style.height = `${h}px`;
-
-		if (!ctx) return;
 
 		ctx.setTransform(1, 0, 0, 1, 0, 0);
 		ctx.scale(dpr, dpr);
@@ -164,25 +128,23 @@
 		ctx.fillStyle = 'black';
 		ctx.fillRect(0, 0, width, height);
 
-		if (imageBitmap) {
-			ctx.drawImage(imageBitmap, 0, 0);
-		}
+		const frame = pixelInfo.frames[currentFrame];
+		const rgba = convertToRGBA(frame.data, pixelInfo.imageInfo, new Map(elements.map(e => [e.tag, e])));
+		const imageData = new ImageData(rgba, frame.width, frame.height);
+		ctx.putImageData(imageData, 0, 0);
 
 		ctx.restore();
 	};
 
 	const changeFrame = (delta: number) => {
-		if (!pixelInfo || !pixelInfo.bitmaps || pixelInfo.bitmaps.length === 0) return;
-
-		currentFrame = (currentFrame + delta + pixelInfo.bitmaps.length) % pixelInfo.bitmaps.length;
-		imageBitmap = pixelInfo.bitmaps[currentFrame];
+		if (!pixelInfo?.frames?.length) return;
+		currentFrame = (currentFrame + delta + pixelInfo.frames.length) % pixelInfo.frames.length;
 		draw();
 	};
 
 	const onWheel = (event: WheelEvent) => {
 		event.preventDefault();
-
-		const delta = -event.deltaY * 0.001; // Adjust zoom sensitivity
+		const delta = -event.deltaY * 0.001;
 		const factor = Math.exp(delta);
 
 		const rect = canvas?.getBoundingClientRect();
@@ -200,7 +162,6 @@
 
 	const onPointerDown = (event: PointerEvent) => {
 		if (!wrapper) return;
-
 		isPanning = true;
 		lastX = event.clientX;
 		lastY = event.clientY;
@@ -213,7 +174,6 @@
 		offsetY += event.clientY - lastY;
 		lastX = event.clientX;
 		lastY = event.clientY;
-
 		draw();
 	};
 
@@ -223,22 +183,9 @@
 		wrapper.releasePointerCapture(event.pointerId);
 	};
 
-	const zoomIn = () => {
-		scale *= 1.1; // Increase scale by 10%
-		draw();
-	};
-
-	const zoomOut = () => {
-		scale /= 1.1; // Decrease scale by 10%
-		draw();
-	};
-
-	const resetView = () => {
-		scale = 1.0;
-		offsetX = 0;
-		offsetY = 0;
-		draw();
-	};
+	const zoomIn = () => { scale *= 1.1; draw(); };
+	const zoomOut = () => { scale /= 1.1; draw(); };
+	const resetView = () => { scale = 1.0; offsetX = 0; offsetY = 0; draw(); };
 
 	const fitToScreen = () => {
 		const bounds = wrapper?.getBoundingClientRect();
@@ -248,7 +195,6 @@
 		scale = Math.min(scaleX || 1, scaleY || 1);
 		offsetX = (bounds.width - width * scale) / 2 || 0;
 		offsetY = (bounds.height - height * scale) / 2 || 0;
-
 		draw();
 	};
 </script>

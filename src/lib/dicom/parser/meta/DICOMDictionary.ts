@@ -1,5 +1,5 @@
-import rawDictionary from './dicom-dictionary.js';
-import type { DICOMEntry } from './dicom-dictionary.js';
+import rawDictionary from './TagDictionary.js';
+import type { DICOMEntry } from './TagDictionary.js';
 
 const dictionary: DICOMEntry[] = Object.values(rawDictionary);
 const tagMap: Record<string, DICOMEntry> = {};

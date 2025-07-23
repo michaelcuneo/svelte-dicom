@@ -1,4 +1,4 @@
-import type { DICOMElement, DICOMDataSet } from './types.js';
+import type { DICOMDataSet } from '../../types/types.js';
 
 export function parseDataSet(
 	buffer: DataView,
@@ -36,7 +36,7 @@ export function parseDataSet(
 		}
 
 		const valueOffset = offset;
-		let value: any;
+		let value: Uint8Array | DICOMDataSet[] | null;
 
 		if (vr === 'SQ') {
 			const [items, nextOffset] = parseSequence(

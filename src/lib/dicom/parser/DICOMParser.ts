@@ -1,7 +1,7 @@
-import { ByteStream } from './ByteStream.js';
-import { getTransferSyntax } from './TransferSyntax.js';
-import { lookupVR, isPixelData } from './DICOMDictionary.js';
-import { debugLog } from './debugStore.js';
+import { ByteStream } from '../ByteStream.js';
+import { getTransferSyntaxInfo } from '$lib/dicom/parser/meta/TransferSyntax.js';
+import { lookupVR, isPixelData } from './meta/DICOMDictionary.js';
+import { debugLog } from '../utils/debugStore.js';
 
 export interface DataElement {
 	tag: string;
@@ -13,7 +13,7 @@ export interface DataElement {
 export interface TransferSyntax {
 	uid: string;
 	isLittleEndian: boolean;
-	isExplicitVR: boolean;
+	isImplicitVR: boolean;
 	isEncapsulated: boolean;
 }
 
@@ -23,7 +23,7 @@ export class DICOMParser {
 
 	constructor(buffer: ArrayBuffer, transferSyntax?: TransferSyntax) {
 		this.byteStream = new ByteStream(buffer);
-		this.transferSyntax = transferSyntax ?? getTransferSyntax('1.2.840.10008.1.2.1');
+		this.transferSyntax = transferSyntax ?? getTransferSyntaxInfo('1.2.840.10008.1.2.1');
 	}
 
 	parseMeta(): DataElement[] {
@@ -46,7 +46,7 @@ export class DICOMParser {
 			.find((el) => el.tag === '0002,0010')
 			?.value?.toString()
 			.trim();
-		return getTransferSyntax(uid ?? '');
+		return getTransferSyntaxInfo(uid ?? '');
 	}
 
 	parse(): DataElement[] {
@@ -74,14 +74,14 @@ export class DICOMParser {
 
 			if (tag === 'FFFE,E0DD') return null;
 
-			let vr = this.transferSyntax.isExplicitVR ? this.byteStream.readString(2) : lookupVR(tag);
+			let vr = this.transferSyntax.isImplicitVR ? this.byteStream.readString(2) : lookupVR(tag);
 			if (!vr) vr = 'UN';
 
 			let length: number;
-			if (this.transferSyntax.isExplicitVR && ['OB', 'OW', 'SQ', 'UN'].includes(vr)) {
+			if (this.transferSyntax.isImplicitVR && ['OB', 'OW', 'SQ', 'UN'].includes(vr)) {
 				this.byteStream.skip(2);
 				length = this.byteStream.readUint32(this.transferSyntax.isLittleEndian);
-			} else if (this.transferSyntax.isExplicitVR) {
+			} else if (this.transferSyntax.isImplicitVR) {
 				length = this.byteStream.readUint16(this.transferSyntax.isLittleEndian);
 			} else {
 				length = this.byteStream.readUint32(this.transferSyntax.isLittleEndian);
