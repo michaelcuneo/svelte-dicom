@@ -1,15 +1,23 @@
-// Example of calling decodeJPEG with parsed JPEG data
-const jpegBytes = new Uint8Array(
-	await fetch('path/to/your/file.jpg').then((res) => res.arrayBuffer())
-);
+import type { DecodedFrame } from '$lib/dicom/types/types.js';
+import { decodeJPEG as internalJPEGDecode } from './JpegDecoderCore.js';
+import { parseJPEGHeader } from './ParseJPEGHeader.js';
 
-// Parse JPEG header to get all the necessary components
-const jpegHeader = parseJPEGHeader(jpegBytes);
+export function decodeJPEG(jpegBytes: Uint8Array): DecodedFrame {
+	// You’ll want to parse SOF and SOS headers to get width/height dynamically
+	// Instead of hardcoding width and height, decode the JPEG headers
+	const options = parseJPEGHeader(jpegBytes); // Assuming parseJPEGHeader() is implemented
 
-// Now, call decodeJPEG with raw data and the Huffman tables
-const decodedImage = decodeJPEG(jpegBytes, jpegHeader.huffmanTablesDC, jpegHeader.huffmanTablesAC, {
-	width: jpegHeader.width,
-	height: jpegHeader.height
-});
+	if (!options) {
+		throw new Error('Failed to parse JPEG headers');
+	}
 
-// decodedImage will have the pixels in RGBA format
+	// Call internal JPEG decoder with dynamic options
+	const decoded = internalJPEGDecode(jpegBytes, options);
+
+	// Return DecodedFrame
+	return {
+		width: decoded.width,
+		height: decoded.height,
+		data: decoded.pixels // RGBA Uint8ClampedArray
+	};
+}
